@@ -19,13 +19,14 @@ impl PwsafeRecord {
         };
     }
     fn group(&self) -> Option<&String> {
-        return match self
+        return if let Some(PwsafeRecordField::Group(g)) = self
             .fields
             .iter()
             .find(|f| matches!(f, PwsafeRecordField::Group(..)))
         {
-            Some(PwsafeRecordField::Group(g)) => Some(g),
-            _ => None,
+            Some(g)
+        } else {
+            None
         };
     }
     fn password(&self) -> Option<&String> {
@@ -52,6 +53,7 @@ impl PwsafeRecord {
 
 trait PwsafeRecordReader {
     fn read_record(&mut self) -> Option<PwsafeRecord>;
+    //    fn filter_records(&mut self, pattern: String) -> Vec<PwsafeRecord>;
 }
 
 impl<R: std::io::Read> PwsafeRecordReader for PwsafeReader<R> {
@@ -75,15 +77,32 @@ impl<R: std::io::Read> PwsafeRecordReader for PwsafeReader<R> {
     }
 }
 
-/* use clap to build cmdline interface */
+/* use clap to build cmdline interface
+
+The tasks we want this tool to accomplish:
+
+1. search, list matching entries, without revealing secrets
+  - select by uuid or group.title fragment match
+  - show uuid, group.title, username, email, url
+2. pull, select a entry and put it's password in clipboard
+  - select, and if only a single match, do it
+  - otherwise, list, and then return non-zero
+3. show, select a entry and print it entirely
+  - select, and if only a single match, do it
+  - show same as seach, but include, password and notes
+
+Allow specification of file, but read from PWSAFE_DB envvar if present
+  - env::var
+Prompt for password, use rpassword crate
+
+ */
 fn main() {
-    /* Implemntation Plan
-    - get file, title, group
-    - get output spec (password, or entire entry)
-    - get db password from user, interactively
-    - decrypt and loop until find entry
-    - output as specified
-    */
+    // parse command
+    // get file
+    // get password
+
+    // get records
+    // operate on record(s)
 
     let filename = "test.pwsafe3";
     let file = BufReader::new(File::open(filename).unwrap());
