@@ -2,8 +2,15 @@
 name = "pwget"
 version = "0.1.0"
 edition = "2021"
+author = "Craig Brozefsky"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# The derive feature lets us use the simple macro forms
+# the env feature allows us to look in the std:env for a value if not provided
+clap = { version = "4.0.29", features = ["derive", "env"] }
 pwsafer = "0.1.3"
+rpassword = "7.2.0"
+uuid = { version = "1.2.2" }
+clipboard = { version = "0.5.0" }
