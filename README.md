@@ -1,4 +1,4 @@
-A simple CLI utility for accessing PWSafe3 databases.
+A simple CLI utility for accessing PWSafe3 databases
 
 ```
 Usage: pwget [OPTIONS] <COMMAND>

@@ -1,18 +1,12 @@
 use clap::{Parser, Subcommand};
+use clipboard::ClipboardContext;
+use clipboard::ClipboardProvider;
 use pwsafer::{PwsafeReader, PwsafeRecordField};
 use rpassword::prompt_password;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
 use uuid::Uuid;
-
-use clipboard::ClipboardContext;
-use clipboard::ClipboardProvider;
-
-fn password_to_clipboard(pass: String) {
-    let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
-    ctx.set_contents(pass).ok();
-}
 
 #[derive(Debug)]
 struct PwsafeRecord {
@@ -189,8 +183,11 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Search for entries, printing a list of matches
-    Search { term: String },
-    /// Retrieve a password for a single entry
+    Search {
+        /// matched against <group>.<title> of the entry
+        term: String,
+    },
+    /// Retrieve a password for an entry
     Password {
         /// matched against <group>.<title> of the entry. If a perfect
         /// match is found, that is used. otherwise, will look for a
@@ -198,15 +195,18 @@ enum Commands {
         /// and no password will be retrieved.
         term: String,
 
+        /// print the password to stdout
         #[arg(long, short, default_value = "false")]
         print: bool,
     },
-    /// Show the full contents of maching entries
-    Show { term: String },
+}
+
+fn password_to_clipboard(pass: String) {
+    let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+    ctx.set_contents(pass).ok();
 }
 
 fn main() {
-    // parse command
     let cli = Cli::parse();
 
     let dbfile = match File::open(&cli.dbfile) {
@@ -273,9 +273,6 @@ fn main() {
                     password_to_clipboard(matches[0].password().unwrap().to_string());
                 }
             }
-        }
-        Commands::Show { term } => {
-            println!("Showing entries matching: {}", term);
         }
     }
 }
