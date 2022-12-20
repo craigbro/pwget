@@ -44,6 +44,12 @@ And you'll be presented with all the entries in the database, in JSONL:
 
 If you want pretty output, use `jq`.
 
+You can limit it to entries matching a `group.title` or `uuid` by providing a term:
+
+```
+pwget list dup
+```
+
 To copy a password to your clipboard:
 
 ```
