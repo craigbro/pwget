@@ -39,6 +39,7 @@ struct Entry {
     url: Option<String>,
     email_address: Option<String>,
     notes: Option<String>,
+    errors: Vec<String>,
 }
 
 impl PwsafeRecord {
@@ -149,6 +150,7 @@ impl PwsafeRecord {
             email_address: self.email_address().cloned(),
             url: self.url().cloned(),
             notes: self.notes().cloned(),
+            errors: self.errors.to_owned(),
         }
     }
 
