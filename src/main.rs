@@ -3,14 +3,42 @@ use clipboard::ClipboardContext;
 use clipboard::ClipboardProvider;
 use pwsafer::{PwsafeReader, PwsafeRecordField};
 use rpassword::prompt_password;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+/// A transient structure to hold the set of pwsafe fields
 #[derive(Debug)]
 struct PwsafeRecord {
     fields: Vec<PwsafeRecordField>,
+    errors: Vec<String>,
+}
+
+/// A secure representations of a record
+#[derive(Serialize, Deserialize, Debug)]
+struct SecureEntry {
+    uuid: String,
+    group: Option<String>,
+    title: Option<String>,
+    username: Option<String>,
+    url: Option<String>,
+    email_address: Option<String>,
+}
+
+/// A full representations of a record, as we support them.  This is
+/// does not support all field types
+#[derive(Serialize, Deserialize, Debug)]
+struct Entry {
+    uuid: String,
+    group: Option<String>,
+    title: Option<String>,
+    password: Option<String>,
+    username: Option<String>,
+    url: Option<String>,
+    email_address: Option<String>,
+    notes: Option<String>,
 }
 
 impl PwsafeRecord {
@@ -55,7 +83,40 @@ impl PwsafeRecord {
             _ => None,
         };
     }
-    #[allow(dead_code)]
+
+    fn username(&self) -> Option<&String> {
+        return match self
+            .fields
+            .iter()
+            .find(|f| matches!(f, PwsafeRecordField::Username(..)))
+        {
+            Some(PwsafeRecordField::Username(t)) => Some(t),
+            _ => None,
+        };
+    }
+
+    fn email_address(&self) -> Option<&String> {
+        return match self
+            .fields
+            .iter()
+            .find(|f| matches!(f, PwsafeRecordField::EmailAddress(..)))
+        {
+            Some(PwsafeRecordField::EmailAddress(t)) => Some(t),
+            _ => None,
+        };
+    }
+
+    fn url(&self) -> Option<&String> {
+        return match self
+            .fields
+            .iter()
+            .find(|f| matches!(f, PwsafeRecordField::Url(..)))
+        {
+            Some(PwsafeRecordField::Url(t)) => Some(t),
+            _ => None,
+        };
+    }
+
     fn notes(&self) -> Option<&String> {
         return match self
             .fields
@@ -67,48 +128,62 @@ impl PwsafeRecord {
         };
     }
 
-    fn to_csv(&self) -> String {
+    fn as_secure_entry(&self) -> SecureEntry {
+        SecureEntry {
+            uuid: self.uuid().unwrap().hyphenated().to_string(),
+            group: self.group().cloned(),
+            title: self.title().cloned(),
+            username: self.username().cloned(),
+            email_address: self.email_address().cloned(),
+            url: self.url().cloned(),
+        }
+    }
+
+    fn as_entry(&self) -> Entry {
+        Entry {
+            uuid: self.uuid().unwrap().hyphenated().to_string(),
+            group: self.group().cloned(),
+            title: self.title().cloned(),
+            password: self.password().cloned(),
+            username: self.username().cloned(),
+            email_address: self.email_address().cloned(),
+            url: self.url().cloned(),
+            notes: self.notes().cloned(),
+        }
+    }
+
+    fn to_json(&self, reveal: bool) -> String {
+        if reveal {
+            serde_json::to_string(&self.as_entry()).unwrap()
+        } else {
+            serde_json::to_string(&self.as_secure_entry()).unwrap()
+        }
+    }
+    // Returns true if <group>.<title> or <uuid> of the entry contains the `term` as a substring. <uuid> is in hyphenated string format.
+    fn search(&self, term: String) -> bool {
         let empty = String::from("");
-        format!(
-            "'{}','{}','{}'",
-            self.uuid().unwrap().hyphenated(),
+        let ts = term.as_str();
+        let uuid = self.uuid().unwrap().hyphenated().to_string();
+        let name = format!(
+            "{}.{}",
             self.group().unwrap_or(&empty),
             self.title().unwrap_or(&empty)
-        )
+        );
+        name.contains(ts) || uuid.contains(ts)
     }
 
-    fn search(&self, term: Option<&String>) -> bool {
+    // Returns true if <group>.<title> or <uuid> matches `term` exactly.
+    // <uuid> is in hypthenated string format
+    fn matchp(&self, term: String) -> bool {
         let empty = String::from("");
-        match term {
-            Some(term) => {
-                let ts = term.as_str();
-                let name = format!(
-                    "{}.{}",
-                    self.group().unwrap_or(&empty),
-                    self.title().unwrap_or(&empty)
-                );
-                name.contains(ts)
-            }
-
-            None => true,
-        }
-    }
-
-    fn matchp(&self, term: Option<&String>) -> bool {
-        let empty = String::from("");
-        match term {
-            Some(term) => {
-                let ts = term.as_str();
-                let name = format!(
-                    "{}.{}",
-                    self.group().unwrap_or(&empty),
-                    self.title().unwrap_or(&empty)
-                );
-                name == ts
-            }
-
-            None => true,
-        }
+        let ts = term.as_str();
+        let uuid = self.uuid().unwrap().hyphenated().to_string();
+        let name = format!(
+            "{}.{}",
+            self.group().unwrap_or(&empty),
+            self.title().unwrap_or(&empty)
+        );
+        name == ts || uuid == ts
     }
 }
 
@@ -120,7 +195,10 @@ trait PwsafeRecordReader {
 
 impl<R: std::io::Read> PwsafeRecordReader for PwsafeReader<R> {
     fn read_record(&mut self) -> Option<PwsafeRecord> {
-        let mut rec = PwsafeRecord { fields: Vec::new() };
+        let mut rec = PwsafeRecord {
+            fields: Vec::new(),
+            errors: Vec::new(),
+        };
 
         while let Some((field_type, field_data)) = self.read_field().unwrap() {
             let result = pwsafer::PwsafeRecordField::new(field_type, field_data);
@@ -129,7 +207,9 @@ impl<R: std::io::Read> PwsafeRecordReader for PwsafeReader<R> {
                     PwsafeRecordField::EndOfRecord => return Some(rec),
                     _ => rec.fields.push(field),
                 },
-                Err(why) => eprintln!("Error reading field({}): {}", field_type, why),
+                Err(why) => rec
+                    .errors
+                    .push(format!("Error reading field({}): {}", field_type, why)),
             };
         }
         if !rec.fields.is_empty() {
@@ -146,23 +226,6 @@ impl<R: std::io::Read> PwsafeRecordReader for PwsafeReader<R> {
         records
     }
 }
-
-/* use clap to build cmdline interface
-
-The tasks we want this tool to accomplish:
-
-1. search, list matching entries, without revealing secrets
-  - select by uuid or group.title fragment match
-  - show uuid, group.title, username, email, url
-2. pull, select a entry and put it's password in clipboard
-  - select, and if only a single match, do it
-  - otherwise, list, and then return non-zero
-
-Allow specification of file, but read from PWSAFE_DB envvar if present
-  - env::var
-Prompt for password, use rpassword crate
-
- */
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -182,17 +245,22 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Search for entries, printing a list of matches
-    Search {
-        /// matched against <group>.<title> of the entry
-        term: String,
+    /// List entries on stdout, in JSONL
+    List {
+        /// A substring matched against `<group>.<title>` or <uuid> of the entry
+        term: Option<String>,
+        /// include password and notes in the output
+        #[arg(long, short, default_value = "false")]
+        reveal: bool,
     },
-    /// Retrieve a password for an entry
-    Password {
-        /// matched against <group>.<title> of the entry. If a perfect
-        /// match is found, that is used. otherwise, will look for a
-        /// partial.  If multiple matches, than entries will be listed
-        /// and no password will be retrieved.
+    /// Retrieve a password for an entry.
+    Pass {
+        /// A string matched against `<group>.<title>` or `<uuid>` of
+        /// the entry. If a perfect match is found, that is used
+        /// immediately.  Otherwise, we will look for a substring
+        /// match.  If there are multiple matches, than entries will
+        /// be listed and no password will be retrieved and will exit
+        /// with a 1.
         term: String,
 
         /// print the password to stdout
@@ -217,7 +285,7 @@ fn main() {
                 cli.dbfile.to_str().unwrap(),
                 e
             );
-            return;
+            std::process::exit(1);
         }
     };
 
@@ -225,7 +293,7 @@ fn main() {
         Ok(p) => p,
         Err(_) => {
             eprintln!("Unable to read password");
-            return;
+            std::process::exit(1);
         }
     };
 
@@ -233,45 +301,60 @@ fn main() {
         Ok(v) => v,
         Err(e) => {
             eprintln!("Error reading {}: {}", cli.dbfile.to_str().unwrap(), e);
-            return;
+            std::process::exit(1);
         }
     };
 
     // get records
     // operate on record(s)
     match &cli.command {
-        Commands::Search { term } => {
-            for record in db.records().iter().filter(|&e| e.search(Some(term))) {
-                println!("{}", record.to_csv())
+        Commands::List { term, reveal } => {
+            if let Some(substr) = term {
+                for record in db
+                    .records()
+                    .iter()
+                    .filter(|&e| e.search(substr.to_string()))
+                {
+                    println!("{}", &record.to_json(*reveal))
+                }
+            } else {
+                for record in db.records() {
+                    println!("{}", &record.to_json(*reveal))
+                }
             }
+            std::process::exit(0)
         }
-        Commands::Password { term, print } => {
+        Commands::Pass { term, print } => {
             let recs = db.records();
 
             // look for an exact "group.title" match first
             // then look for any entries containing our term
-            if let Some(exact) = recs.iter().find(|&e| e.matchp(Some(term))) {
+            if let Some(exact) = recs.iter().find(|&e| e.matchp(term.clone())) {
                 if *print {
                     println!("{}", exact.password().unwrap());
                 } else {
                     password_to_clipboard(exact.password().unwrap().to_string());
                 }
+                std::process::exit(0);
             } else {
                 let matches: Vec<&PwsafeRecord> =
-                    recs.iter().filter(|&e| e.search(Some(term))).collect();
+                    recs.iter().filter(|&e| e.search(term.clone())).collect();
 
                 if matches.is_empty() {
                     eprintln!("No matches found.");
+                    std::process::exit(1);
                 } else if matches.len() > 1 {
-                    eprintln!("Multiple matches: ");
+                    eprintln!("Multiple matches, please be more specific: ");
                     for record in matches {
-                        println!("{}", record.to_csv())
+                        eprintln!("{}", &record.to_json(false))
                     }
+                    std::process::exit(1);
                 } else if *print {
                     println!("{}", matches[0].password().unwrap());
                 } else {
                     password_to_clipboard(matches[0].password().unwrap().to_string());
                 }
+                std::process::exit(0);
             }
         }
     }
