@@ -20,7 +20,7 @@ Commands:
   help  Print this message or the help of the given subcommand(s)
 
 Options:
-  -d, --dbfile <DBFILE>  The pwsafe3 database file to read. [env: PWSAFE_DB=test/test.psafe3] [default: pwsafe3.db]
+  -d, --dbfile <DBFILE>  The pwsafe3 database file to read. [env: PWSAFE_DB=] [default: pwsafe3.db]
   -h, --help             Print help information
   -V, --version          Print version information
 ```
