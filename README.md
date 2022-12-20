@@ -1,6 +1,6 @@
 A simple cli utility for accessing PWSafe3 databases
 
-This is a `clap` based wrapper for the `pwsafer` create for limited
+This is a `clap` based wrapper for the `pwsafer` crate for limited
 access to PWSafe3 database records.  Its able to get passwords to your
 clipboard or stdout, and to export a database to JSONL.
 
