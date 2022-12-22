@@ -19,21 +19,31 @@
         naersk' = pkgs.callPackage naersk {
         };
 
+        myrust = pkgs.rust-bin.stable.latest.default.override {
+          extensions = [ "rust-analyzer" ];
+        };
+
       in
       with pkgs;
       {
 
         # For `nix build` & `nix run`:
         defaultPackage = naersk'.buildPackage {
-          buildInputs =  [ darwin.apple_sdk.frameworks.AppKit ];
+          buildInputs =  [
+            darwin.apple_sdk.frameworks.AppKit
+            rust-bin.stable.latest.default
+          ];
           src = ./.;
         };
 
         # For `nix develop`:
+        myrust = rust-bin.stable.latest.default.override {
+              extensions = ["rust-analyzer"];
+            };
         devShell = pkgs.mkShell {
           buildInputs = [
             darwin.apple_sdk.frameworks.AppKit
-            rust-bin.stable.latest.default
+            myrust
           ];
         };
       }
