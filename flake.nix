@@ -11,8 +11,12 @@
   outputs = { self, flake-utils, naersk, nixpkgs, rust-overlay }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        inherit (pkgs.stdenv) isDarwin isLinux;
+        inherit (pkgs.stdenv) isDarwin;
+
+        # this overlay gives us pre-built binaries for the rust
+        # toolchain, so we have reproducible builds
         overlays = [ (import rust-overlay) ];
+
         pkgs = (import nixpkgs) {
           inherit system overlays;
         };
@@ -27,13 +31,12 @@
           rustc = myrust;
         };
 
+        # on osx, we need to include some apple libs
         appkit = if isDarwin then pkgs.darwin.apple_sdk.frameworks.AppKit else null;
 
       in
       with pkgs;
       {
-
-
         # For `nix build` & `nix run`:
         packages.default = naersk'.buildPackage {
           buildInputs =  [
